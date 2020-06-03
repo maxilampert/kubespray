@@ -56,8 +56,10 @@ spec:
             # needed only for topology aware setups
             #- name: VSPHERE_CSI_CONFIG
             #  value: "/etc/cloud/csi-vsphere.conf" # here csi-vsphere.conf is the name of the file used for creating secret using "--from-file" flag
-          args:
-            - "--v=4"
+            - name: X_CSI_DEBUG
+              value: "true"
+            - name: LOGGER_LEVEL
+              value: "PRODUCTION" # Options: DEVELOPMENT, PRODUCTION
           securityContext:
             privileged: true
             capabilities:
@@ -119,3 +121,8 @@ spec:
         - name: device-dir
           hostPath:
             path: /dev
+      tolerations:
+        - effect: NoExecute
+          operator: Exists
+        - effect: NoSchedule
+          operator: Exists

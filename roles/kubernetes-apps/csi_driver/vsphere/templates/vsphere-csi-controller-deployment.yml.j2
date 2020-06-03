@@ -1,13 +1,15 @@
-kind: StatefulSet
+kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: vsphere-csi-controller
   namespace: kube-system
 spec:
-  serviceName: vsphere-csi-controller
   replicas: {{ vsphere_csi_controller_replicas }}
-  updateStrategy:
-    type: "RollingUpdate"
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
       app: vsphere-csi-controller
@@ -22,8 +24,9 @@ spec:
         node-role.kubernetes.io/master: ""
       tolerations:
         - operator: "Exists"
-          key: node-role.kubernetes.io/master
           effect: NoSchedule
+        - operator: "Exists"
+          effect: NoExecute
       dnsPolicy: "Default"
       containers:
         - name: csi-attacher
@@ -32,6 +35,20 @@ spec:
             - "--v=4"
             - "--timeout=300s"
             - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+        - name: csi-resizer
+          image: {{ quay_image_repo }}/k8scsi/csi-resizer:{{ vsphere_csi_resizer_image_tag }}
+          args:
+            - "--v=4"
+            - "--csiTimeout=300s"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -45,8 +62,6 @@ spec:
             preStop:
               exec:
                 command: ["/bin/sh", "-c", "rm -rf /var/lib/csi/sockets/pluginproxy/csi.vsphere.vmware.com"]
-          args:
-            - "--v=4"
           env:
             - name: CSI_ENDPOINT
               value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
@@ -54,6 +69,8 @@ spec:
               value: "controller"
             - name: VSPHERE_CSI_CONFIG
               value: "/etc/cloud/csi-vsphere.conf"
+            - name: LOGGER_LEVEL
+              value: "PRODUCTION" # Options: DEVELOPMENT, PRODUCTION
           volumeMounts:
             - mountPath: /etc/cloud
               name: vsphere-config-volume
@@ -86,12 +103,14 @@ spec:
           image: {{ gcr_image_repo }}/cloud-provider-vsphere/csi/release/syncer:{{ vsphere_syncer_image_tag }}
           imagePullPolicy: {{ k8s_image_pull_policy }}
           args:
-            - "--v=2"
+            - "--leader-election"
           env:
             - name: FULL_SYNC_INTERVAL_MINUTES
               value: "30"
             - name: VSPHERE_CSI_CONFIG
               value: "/etc/cloud/csi-vsphere.conf"
+            - name: LOGGER_LEVEL
+              value: "PRODUCTION" # Options: DEVELOPMENT, PRODUCTION
           volumeMounts:
             - mountPath: /etc/cloud
               name: vsphere-config-volume
@@ -104,6 +123,8 @@ spec:
             - "--csi-address=$(ADDRESS)"
             - "--feature-gates=Topology=true"
             - "--strict-topology"
+            - "--enable-leader-election"
+            - "--leader-election-type=leases"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -111,13 +132,13 @@ spec:
             - mountPath: /csi
               name: socket-dir
       volumes:
-        - name: vsphere-config-volume
-          secret:
-            secretName: vsphere-config-secret
-        - name: socket-dir
-          hostPath:
-            path: /var/lib/csi/sockets/pluginproxy/csi.vsphere.vmware.com
-            type: DirectoryOrCreate
+      - name: vsphere-config-volume
+        secret:
+          secretName: vsphere-config-secret
+      - name: socket-dir
+        hostPath:
+          path: /var/lib/csi/sockets/pluginproxy/csi.vsphere.vmware.com
+          type: DirectoryOrCreate
 ---
 apiVersion: storage.k8s.io/v1
 kind: CSIDriver

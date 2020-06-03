@@ -18,7 +18,7 @@
     dest: "{{ kube_config_dir }}/{{ item }}"
   with_items:
     - vsphere-csi-controller-rbac.yml
-    - vsphere-csi-controller-ss.yml
+    - vsphere-csi-controller-deployment.yml
     - vsphere-csi-node.yml
   register: vsphere_csi_manifests
   when: inventory_hostname == groups['kube-master'][0]
