@@ -1,12 +1,10 @@
 ---
 - name: install | Copy kubeadm binary from download dir
-  synchronize:
+  copy:
+    remote_src: true
     src: "{{ local_release_dir }}/kubeadm-{{ kubeadm_version }}-{{ image_arch }}"
     dest: "{{ bin_dir }}/kubeadm"
-    compress: no
-    perms: yes
-    owner: no
-    group: no
+    mode: preserve
   delegate_to: "{{ inventory_hostname }}"
   tags:
     - kubeadm
